@@ -3,17 +3,21 @@
 # pysynscan
 # Copyright (c) July 2020 Nacho Mas
 
-
+import serial #MattC
 import socket
 import logging
 import os
 import select
 import threading
+import time
 
 
-
-UDP_IP = os.getenv("SYNSCAN_UDP_IP","192.168.4.1")
-UDP_PORT = int(os.getenv("SYNSCAN_UDP_PORT",11880))
+# Modifications for USB serial comms
+SERIAL_PORT = "COM5"
+UDP_IP = SERIAL_PORT
+#UDP_IP = os.getenv("SYNSCAN_UDP_IP","192.168.4.1")
+UDP_PORT = 0
+#UDP_PORT = int(os.getenv("SYNSCAN_UDP_PORT",11880))
 
 LOGGING_LEVEL=os.getenv("SYNSCAN_LOGGING_LEVEL",logging.INFO)
 
@@ -24,36 +28,76 @@ class comm:
     '''
     def __init__(self,udp_ip=UDP_IP,udp_port=UDP_PORT):
         ''' Init the UDP socket '''
-       
-        logging.basicConfig(
-            format='%(asctime)s %(levelname)s:synscanComm %(message)s',
-            level=LOGGING_LEVEL
-            )
-        logging.info(f"UDP target IP: {udp_ip}")
-        logging.info(f"UDP target port: {udp_port}")
-        self._sock = socket.socket(socket.AF_INET, # Internet
-        socket.SOCK_DGRAM) # UDP
-        self._sock.setblocking(0)
-        self.udp_ip=udp_ip
-        self.udp_port=udp_port
-        self.commOK=False
-        self.lock= threading.Lock()
+        
+        if (udp_ip == SERIAL_PORT):
+            print("HERE")
+            print(LOGGING_LEVEL)
+            logging.basicConfig(
+                format='%(asctime)s %(levelname)s:synscanComm %(message)s',
+                level=LOGGING_LEVEL
+                )
+            logging.info(f"UDP target IP: {udp_ip}")
+            logging.info(f"UDP target port: {udp_port}")
+            self._sock = serial.Serial(SERIAL_PORT, 9600, timeout=1)
+            #self._sock.setblocking(0)
+            self.udp_ip=udp_ip
+            self.udp_port=udp_port
+            self.commOK=False
+            self.lock= threading.Lock()
+        else:
+            logging.basicConfig(
+                format='%(asctime)s %(levelname)s:synscanComm %(message)s',
+                level=LOGGING_LEVEL
+                )
+            logging.info(f"UDP target IP: {udp_ip}")
+            logging.info(f"UDP target port: {udp_port}")
+            self._sock = socket.socket(socket.AF_INET, # Internet
+            socket.SOCK_DGRAM) # UDP
+            self._sock.setblocking(0)
+            self.udp_ip=udp_ip
+            self.udp_port=udp_port
+            self.commOK=False
+            self.lock= threading.Lock()
 
     
     def _send_raw_cmd(self,cmd,timeout_in_seconds=2):
         '''Low level send command function ''' 
-        with self.lock:   
-            self._sock.sendto(cmd,(self.udp_ip,self.udp_port))
-            ready = select.select([self._sock], [], [], timeout_in_seconds)
-            if ready[0]:
-                self.commOK=True
-                response,(fromhost,fromport) = self._sock.recvfrom(1024)
-                logging.debug(f"response: {response} host:{fromhost} port:{fromport}" )
-            else:
-                self.commOK=False
-                logging.debug(f"Socket timeout. {timeout_in_seconds}s without response" )
-                raise(NameError('SynscanSocketTimeoutError'))
-                response = False        
+        if (self.udp_ip == SERIAL_PORT):
+            with self.lock:   
+                self._sock.write(cmd)
+                #ready = select.select([self._sock], [], [], timeout_in_seconds)
+                # Mod to work on windows
+                #ready = self._sock.inWaiting()
+                #time.sleep(.5)
+                if True:
+                    self.commOK=True
+                    max_packet = 16
+                    data = self._sock.read_until(expected='\n', size=max_packet*2)
+                    #print(bytes(data))
+                    response = data#[len(cmd):]
+                    #response = str(data[:-1])
+                    # print("[")
+                    # print(response)
+                    # print("]")
+                    logging.debug(f"response: {response}" )
+                else:
+                    self.commOK=False
+                    logging.debug(f"Socket timeout. {timeout_in_seconds}s without response" )
+                    raise(NameError('SynscanSocketTimeoutError'))
+                    response = False
+        else:
+            with self.lock:   
+                self._sock.sendto(cmd,(self.udp_ip,self.udp_port))
+                ready = select.select([self._sock], [], [], timeout_in_seconds)
+                if ready[0]:
+                    self.commOK=True
+                    response,(fromhost,fromport) = self._sock.recvfrom(1024)
+                    logging.debug(f"response: {response} host:{fromhost} port:{fromport}" )
+                else:
+                    self.commOK=False
+                    logging.debug(f"Socket timeout. {timeout_in_seconds}s without response" )
+                    raise(NameError('SynscanSocketTimeoutError'))
+                    response = False        
         return response
 
     def _send_cmd(self,cmd,axis,data=None,ndigits=6):

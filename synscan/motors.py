@@ -49,8 +49,14 @@ import logging
 from synscan.comm import comm
 import time
 
-UDP_IP = os.getenv("SYNSCAN_UDP_IP","192.168.4.1")
-UDP_PORT = int(os.getenv("SYNSCAN_UDP_PORT",11880))
+# Modifications for USB serial comms
+SERIAL_PORT = "COM5"
+UDP_IP = SERIAL_PORT
+#UDP_IP = os.getenv("SYNSCAN_UDP_IP","192.168.4.1")
+UDP_PORT = 0
+#UDP_PORT = int(os.getenv("SYNSCAN_UDP_PORT",11880))
+
+LOGGING_LEVEL=os.getenv("SYNSCAN_LOGGING_LEVEL",logging.INFO)
 
 LOGGING_LEVEL=os.getenv("SYNSCAN_LOGGING_LEVEL",logging.INFO)
 
